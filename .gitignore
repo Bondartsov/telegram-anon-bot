@@ -1,0 +1,30 @@
+# Environment — never commit secrets
+.env
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Data — contains user messages
+data/*.db
+data/*.db-journal
+db/
+
+# Logs
+*.log
+logs/
+bot_log.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+nul

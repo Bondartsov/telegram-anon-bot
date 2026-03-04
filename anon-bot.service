@@ -1,0 +1,22 @@
+[Unit]
+Description=Telegram Anonymous Questions Bot
+After=network.target
+
+[Service]
+Type=simple
+User=user
+WorkingDirectory=/home/user/telegram-anon-bot
+ExecStart=/home/user/telegram-anon-bot/venv/bin/python -m src.main
+Restart=always
+RestartSec=10
+
+EnvironmentFile=/home/user/telegram-anon-bot/.env
+Environment=PYTHONUNBUFFERED=1
+
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
