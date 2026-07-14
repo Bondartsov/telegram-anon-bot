@@ -439,30 +439,6 @@ async def set_group_config(
     await db.commit()
     
     logger.info(f"[M-DB][set_group_config][SET] Group {group_id} configured with topic {topic_id}")
-async def get_latest_group_config(
-    db,
-):
-    """
-    Get the most recently configured group and topic.
-
-    Returns:
-        tuple: (group_id, topic_id) or None if no config exists
-    """
-    async with db.execute(
-        "SELECT group_id, topic_id FROM group_configs ORDER BY updated_at DESC LIMIT 1"
-    ) as cursor:
-        row = await cursor.fetchone()
-
-    if row:
-        logger.debug(
-            f"[M-DB][get_latest_group_config][GET] "
-            f"Latest config: group {row['group_id']}, topic {row['topic_id']}"
-        )
-        return row["group_id"], row["topic_id"]
-
-    logger.debug("[M-DB][get_latest_group_config][NOT_FOUND] No group config found")
-    return None
-
 
 
 async def get_latest_group_config(
