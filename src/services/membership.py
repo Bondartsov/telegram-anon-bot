@@ -116,46 +116,6 @@ async def is_group_member(
 
 
 # ==============================================================================
-# START_BLOCK: get_member_status
-# ==============================================================================
-
-async def get_member_status(
-    bot: Bot,
-    user_id: int,
-    group_id: Optional[int] = None
-) -> Optional[str]:
-    """
-    Get detailed member status for a user.
-    
-    Args:
-        bot: Aiogram Bot instance
-        user_id: Telegram user ID
-        group_id: Target group ID (uses config.GROUP_ID if not provided)
-        
-    Returns:
-        str: Member status (member, administrator, creator, left, kicked, restricted)
-        None: If unable to determine status
-    """
-    if group_id is None:
-        group_id = config.GROUP_ID
-    
-    try:
-        member = await bot.get_chat_member(chat_id=group_id, user_id=user_id)
-        return member.status
-        
-    except Exception as e:
-        logger.error(
-            f"[M-MEMBERSHIP][get_member_status][ERROR] "
-            f"Failed to get status for user {user_id}: {e}"
-        )
-        return None
-
-# ==============================================================================
-# END_BLOCK: get_member_status
-# ==============================================================================
-
-
-# ==============================================================================
 # START_BLOCK: is_admin
 # ==============================================================================
 

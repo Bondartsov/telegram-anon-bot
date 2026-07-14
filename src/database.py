@@ -6,7 +6,6 @@ SCOPE: SQLite operations, schema management, CRUD operations
 DEPENDS: none
 """
 
-import json
 import logging
 import uuid
 from datetime import datetime, timedelta
@@ -203,68 +202,6 @@ async def ensure_user(
 # ==============================================================================
 # START_BLOCK: Question operations
 # ==============================================================================
-
-async def save_question(
-    db: aiosqlite.Connection,
-    user_id: int,
-    content: str,
-    group_id: int,
-    topic_id: int,
-    media_type: Optional[str] = None,
-    media_file_id: Optional[str] = None,
-    topic_message_id: Optional[int] = None
-) -> str:
-    """
-    Save a question to the database.
-    
-    Args:
-        db: Database connection
-        user_id: Telegram user ID who submitted the question
-        content: Question text content
-        group_id: Target group ID
-        topic_id: Target topic ID
-        media_type: Type of media (photo, video, etc.) or None
-        media_file_id: Telegram file ID for media or None
-        topic_message_id: Message ID in topic after posting
-        
-    Returns:
-        str: Generated question ID (UUID)
-    """
-    question_id = str(uuid.uuid4())
-    
-    await db.execute(
-        """
-        INSERT INTO questions 
-        (id, user_id, content, media_type, media_file_id, group_id, topic_id, topic_message_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (question_id, user_id, content, media_type, media_file_id, group_id, topic_id, topic_message_id)
-    )
-    await db.commit()
-    
-    logger.info(f"[M-DB][save_question][SAVE] Question {question_id} saved for user {user_id}")
-    return question_id
-
-
-async def update_question_message_id(
-    db: aiosqlite.Connection,
-    question_id: str,
-    topic_message_id: int
-) -> None:
-    """
-    Update the topic message ID after posting.
-    
-    Args:
-        db: Database connection
-        question_id: Question UUID
-        topic_message_id: Message ID in topic
-    """
-    await db.execute(
-        "UPDATE questions SET topic_message_id = ? WHERE id = ?",
-        (topic_message_id, question_id)
-    )
-    await db.commit()
-
 
 async def get_user_questions(
     db: aiosqlite.Connection,
@@ -510,42 +447,6 @@ async def save_pending_question(
     
     logger.info(f"[M-DB][save_pending_question][SAVE] Pending question {question_id} for user {user_id}")
     return question_id
-
-
-async def get_pending_questions(
-    db: aiosqlite.Connection
-) -> list[dict]:
-    """
-    Get all pending questions for moderation.
-    
-    Returns:
-        list[dict]: List of pending questions
-    """
-    async with db.execute(
-        """
-        SELECT id, user_id, content, media_type, media_file_id, group_id, topic_id, created_at
-        FROM questions
-        WHERE status = 'pending'
-        ORDER BY created_at ASC
-        """
-    ) as cursor:
-        rows = await cursor.fetchall()
-    
-    questions = []
-    for row in rows:
-        questions.append({
-            "id": row["id"],
-            "user_id": row["user_id"],
-            "content": row["content"],
-            "media_type": row["media_type"],
-            "media_file_id": row["media_file_id"],
-            "group_id": row["group_id"],
-            "topic_id": row["topic_id"],
-            "created_at": row["created_at"]
-        })
-    
-    logger.debug(f"[M-DB][get_pending_questions][GET] Found {len(questions)} pending questions")
-    return questions
 
 
 async def approve_question(

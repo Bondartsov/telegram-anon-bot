@@ -8,7 +8,6 @@ DEPENDS: M-CONFIG, M-DB, M-HANDLER-PRIVATE, M-HANDLER-GROUP, M-HANDLER-CALLBACK
 
 import asyncio
 import logging
-import signal
 import sys
 
 from aiogram import Bot, Dispatcher

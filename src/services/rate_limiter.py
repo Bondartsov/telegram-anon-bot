@@ -169,64 +169,6 @@ class RateLimiter:
             f"[M-RATE-LIMIT][record_submission][RECORD] "
             f"Submission recorded for user {user_id}"
         )
-    
-    def cleanup_old(self) -> int:
-        """
-        Remove all expired entries from memory.
-        
-        Returns:
-            int: Number of entries removed
-        """
-        now = time.time()
-        cutoff = now - self.window_seconds
-        removed = 0
-        
-        for user_id in list(self.submissions.keys()):
-            original_count = len(self.submissions[user_id])
-            self.submissions[user_id] = [
-                s for s in self.submissions[user_id] if s.timestamp > cutoff
-            ]
-            removed += original_count - len(self.submissions[user_id])
-            
-            # Remove empty lists
-            if not self.submissions[user_id]:
-                del self.submissions[user_id]
-        
-        if removed > 0:
-            logger.info(
-                f"[M-RATE-LIMIT][cleanup_old][CLEANUP] "
-                f"Removed {removed} expired entries"
-            )
-        
-        return removed
-    
-    def get_user_count(self, user_id: int) -> int:
-        """
-        Get current submission count for a user.
-        
-        Args:
-            user_id: Telegram user ID
-            
-        Returns:
-            int: Number of active submissions
-        """
-        now = time.time()
-        cutoff = now - self.window_seconds
-        return len([s for s in self.submissions.get(user_id, []) if s.timestamp > cutoff])
-    
-    def reset_user(self, user_id: int) -> None:
-        """
-        Reset rate limit for a specific user (admin function).
-        
-        Args:
-            user_id: Telegram user ID
-        """
-        if user_id in self.submissions:
-            del self.submissions[user_id]
-            logger.info(
-                f"[M-RATE-LIMIT][reset_user][RESET] "
-                f"Rate limit reset for user {user_id}"
-            )
 
 # ==============================================================================
 # END_BLOCK: RateLimiter
@@ -255,7 +197,4 @@ def get_rate_limiter() -> RateLimiter:
         from src.config import config
         _rate_limiter = RateLimiter(limit=config.RATE_LIMIT)
     return _rate_limiter
-
-# For backward compatibility
-rate_limiter = property(lambda self: get_rate_limiter())
 
