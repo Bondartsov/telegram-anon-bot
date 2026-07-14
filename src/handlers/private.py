@@ -3,7 +3,7 @@ M-HANDLER-PRIVATE: Private Chat Handler
 ========================================
 PURPOSE: Handle messages in private chats
 SCOPE: /start, /delete, /mod_history, /stats, question submission
-DEPENDS: M-CONFIG, M-DB, M-ANONYMIZER, M-RATE-LIMIT, M-HANDLER-CALLBACK
+DEPENDS: M-CONFIG, M-DB, M-ANONYMIZER, M-RATE-LIMIT, M-MEMBERSHIP
 """
 
 import logging
@@ -14,7 +14,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from src.config import config
 from src.database import (
-    get_latest_group_config, 
+    get_latest_group_config,
     save_pending_question,
     get_moderation_history,
     get_stats
@@ -25,262 +25,131 @@ from src.services.membership import is_group_member
 from src.services.rate_limiter import get_rate_limiter
 
 logger = logging.getLogger("anon_bot")
-
 router = Router()
 
 
-# ==============================================================================
-# MODULE_CONTRACT
-# ==============================================================================
-"""
-Contract: Private Chat Handler
-
-PURPOSE:
-    Handle all private chat messages for the anonymous questions bot.
-
-INPUTS:
-    - message: Message — Private chat message from user
-
-OUTPUTS:
-    - response: Message — Feedback to user
-
-ERRORS:
-    - RATE_EXCEEDED: User exceeded hourly rate limit
-    - TOPIC_NOT_CONFIGURED: No topic configured for group
-    - INVALID_CONTENT: Content validation failed
-
-EXPORTS:
-    - router: Aiogram router with registered handlers
-"""
-
-# ==============================================================================
-# MODULE_MAP
-# ==============================================================================
-"""
-BLOCKS:
-    1. cmd_start — Welcome message and instructions
-    2. cmd_delete — Show deletion keyboard
-    3. handle_question — Process text/photo questions with moderation
-"""
-
-# ==============================================================================
-# START_BLOCK: cmd_start
-# ==============================================================================
-
 @router.message(Command("start"), F.chat.type == "private")
 async def cmd_start(message: Message) -> None:
-    """
-    Handle /start command in private chat.
-    
-    Shows welcome message with instructions.
-    """
+    """Welcome message with instructions."""
     welcome_text = (
-        "👋 <b>Добро пожаловать!</b>\n\n"
-        "Я бот для анонимных вопросов.\n\n"
-        
-        "📝 <b>Как задать вопрос:</b>\n"
-        "• Напишите текст вопроса\n"
-        "• Или отправьте фото с подписью\n\n"
-        
-        "🔒 <b>Анонимность гарантирована:</b>\n"
-        "• Админ видит только текст вопроса\n"
-        "• Ваша личность скрыта полностью\n"
-        "• Вопрос публикуется без имени\n\n"
-        
-        "✅ <b>Лёгкая модерация:</b>\n"
-        "• Вопросы проверяются на адекватность\n"
-        "• Глупости и спам не пройдут\n\n"
-        
-        f"⏱ <b>Лимит:</b> {config.RATE_LIMIT} вопросов/час\n\n"
-        
-        "🗑 <b>Команды:</b>\n"
-        "• /delete — удалить ваш вопрос"
+        "\U0001f44b <b>\u0414\u043e\u0431\u0440\u043e \u043f\u043e\u0436\u0430\u043b\u043e\u0432\u0430\u0442\u044c!</b>\n\n"
+        "\u042f \u0431\u043e\u0442 \u0434\u043b\u044f \u0430\u043d\u043e\u043d\u0438\u043c\u043d\u044b\u0445 \u0432\u043e\u043f\u0440\u043e\u0441\u043e\u0432.\n\n"
+        "\U0001f4dd <b>\u041a\u0430\u043a \u0437\u0430\u0434\u0430\u0442\u044c \u0432\u043e\u043f\u0440\u043e\u0441:</b>\n"
+        "\u2022 \u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435 \u0442\u0435\u043a\u0441\u0442 \u0432\u043e\u043f\u0440\u043e\u0441\u0430\n"
+        "\u2022 \u0418\u043b\u0438 \u043e\u0442\u043f\u0440\u0430\u0432\u044c\u0442\u0435 \u0444\u043e\u0442\u043e \u0441 \u043f\u043e\u0434\u043f\u0438\u0441\u044c\u044e\n\n"
+        "\U0001f512 <b>\u0410\u043d\u043e\u043d\u0438\u043c\u043d\u043e\u0441\u0442\u044c \u0433\u0430\u0440\u0430\u043d\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0430</b>\n\n"
+        f"\u23f1 <b>\u041b\u0438\u043c\u0438\u0442:</b> {config.RATE_LIMIT} \u0432\u043e\u043f\u0440\u043e\u0441\u043e\u0432/\u0447\u0430\u0441\n\n"
+        "\U0001f5d1 <b>\u041a\u043e\u043c\u0430\u043d\u0434\u044b:</b>\n"
+        "\u2022 /delete \u2014 \u0443\u0434\u0430\u043b\u0438\u0442\u044c \u0432\u0430\u0448 \u0432\u043e\u043f\u0440\u043e\u0441"
     )
-    
     await message.answer(welcome_text, parse_mode="HTML")
-    
-    logger.info(
-        f"[M-HANDLER-PRIVATE][cmd_start][WELCOME] "
-        f"User {message.from_user.id} started the bot"
-    )
+    logger.info(f"[M-HANDLER-PRIVATE][cmd_start][WELCOME] User {message.from_user.id} started the bot")
 
-# ==============================================================================
-# END_BLOCK: cmd_start
-# ==============================================================================
-
-
-# ==============================================================================
-# START_BLOCK: cmd_delete
-# ==============================================================================
 
 @router.message(Command("delete"), F.chat.type == "private")
 async def cmd_delete(message: Message, bot: Bot, db) -> None:
-    """
-    Handle /delete command in private chat.
-    
-    Shows keyboard with user's questions for deletion.
-    """
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    
-    await show_delete_keyboard(bot, db, user_id, chat_id)
-    
-    logger.info(
-        f"[M-HANDLER-PRIVATE][cmd_delete][REQUEST] "
-        f"User {user_id} requested delete keyboard"
-    )
+    """Show deletion keyboard for user's recent questions."""
+    await show_delete_keyboard(bot, db, message.from_user.id, message.chat.id)
 
-# ==============================================================================
-# END_BLOCK: cmd_delete
-# ==============================================================================
-
-
-# ==============================================================================
-# START_BLOCK: Admin commands
-# ==============================================================================
 
 @router.message(Command("mod_history"), F.chat.type == "private")
 async def cmd_mod_history(message: Message, db) -> None:
-    """
-    Handle /mod_history command - admin only.
-    
-    Shows moderation history.
-    """
+    """Admin: show moderation history."""
     if message.from_user.id != config.ADMIN_ID:
-        await message.answer("❌ Эта команда только для администратора")
+        await message.answer("\u274c \u042d\u0442\u0430 \u043a\u043e\u043c\u0430\u043d\u0434\u0430 \u0442\u043e\u043b\u044c\u043a\u043e \u0434\u043b\u044f \u0430\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0430")
         return
-    
     history = await get_moderation_history(db, limit=15)
-    
     if not history:
-        await message.answer("📭 История модерации пуста")
+        await message.answer("\U0001f4ed \u0418\u0441\u0442\u043e\u0440\u0438\u044f \u043c\u043e\u0434\u0435\u0440\u0430\u0446\u0438\u0438 \u043f\u0443\u0441\u0442\u0430")
         return
-    
-    text = "📋 <b>История модерации</b>\n\n"
-    
+    text = "\U0001f4cb <b>\u0418\u0441\u0442\u043e\u0440\u0438\u044f \u043c\u043e\u0434\u0435\u0440\u0430\u0446\u0438\u0438</b>\n\n"
     for item in history:
-        status_emoji = "✅" if item["status"] == "approved" else "❌"
-        content = item["content"][:80] + "..." if len(item["content"]) > 80 else item["content"]
-        text += f"{status_emoji} {content}\n"
-        text += f"   └ {item['created_at'][:16]}\n\n"
-    
+        emoji = "\u2705" if item["status"] == "approved" else "\u274c"
+        text += f"{emoji} {item['content']}\n   \u2514 {item['created_at'][:16]}\n\n"
     await message.answer(text, parse_mode="HTML")
-    logger.info(f"[M-HANDLER-PRIVATE][cmd_mod_history] Admin viewed history")
 
 
 @router.message(Command("stats"), F.chat.type == "private")
 async def cmd_stats(message: Message, db) -> None:
-    """
-    Handle /stats command - admin only.
-    
-    Shows moderation statistics.
-    """
+    """Admin: show bot statistics."""
     if message.from_user.id != config.ADMIN_ID:
-        await message.answer("❌ Эта команда только для администратора")
+        await message.answer("\u274c \u042d\u0442\u0430 \u043a\u043e\u043c\u0430\u043d\u0434\u0430 \u0442\u043e\u043b\u044c\u043a\u043e \u0434\u043b\u044f \u0430\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0430")
         return
-    
     stats = await get_stats(db)
-    
     text = (
-        "📊 <b>Статистика бота</b>\n\n"
-        f"📝 Всего вопросов: {stats['total']}\n"
-        f"✅ Одобрено: {stats['approved']}\n"
-        f"❌ Отклонено: {stats['rejected']}\n"
-        f"⏳ Ожидают: {stats['pending']}"
+        "\U0001f4ca <b>\u0421\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0430 \u0431\u043e\u0442\u0430</b>\n\n"
+        f"\U0001f4dd \u0412\u0441\u0435\u0433\u043e: {stats['total']}\n"
+        f"\u2705 \u041e\u0434\u043e\u0431\u0440\u0435\u043d\u043e: {stats['approved']}\n"
+        f"\u274c \u041e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u043e: {stats['rejected']}\n"
+        f"\u23f3 \u041e\u0436\u0438\u0434\u0430\u044e\u0442: {stats['pending']}"
     )
-    
     await message.answer(text, parse_mode="HTML")
-    logger.info(f"[M-HANDLER-PRIVATE][cmd_stats] Admin viewed stats")
 
-# ==============================================================================
-# END_BLOCK: Admin commands
-# ==============================================================================
 
 @router.message(F.chat.type == "private")
 async def handle_question(message: Message, bot: Bot, db) -> None:
     """
-    Handle text or photo messages as question submissions.
-    
+    Handle question submissions.
+
     Flow:
-    1. Check rate limit
-    2. Extract and validate content
-    3. Get topic configuration
-    4. Save as pending question
-    5. Send to admin for moderation
-    6. Notify user
+      1. Rate limit check
+      2. Extract & validate content
+      3. Get active group config from DB (set via /set_topic)
+      4. Verify user is a group member
+      5. Save pending question
+      6. Send to admin for moderation
+      7. Notify user
     """
     user_id = message.from_user.id
-    
-    # 1. Check rate limit
+
+    # 1. Rate limit
     rate_limiter = get_rate_limiter()
     limit_check = rate_limiter.check_limit(user_id)
-    
     if not limit_check["allowed"]:
         reset_minutes = limit_check["reset_in"] // 60
         await message.answer(
-            f"⏱ <b>Превышен лимит вопросов</b>\n\n"
-            f"Вы уже отправили {limit_check['current']} вопросов.\n"
-            f"Попробуйте через {reset_minutes} минут.",
+            f"\u23f1 <b>\u041f\u0440\u0435\u0432\u044b\u0448\u0435\u043d \u043b\u0438\u043c\u0438\u0442 \u0432\u043e\u043f\u0440\u043e\u0441\u043e\u0432</b>\n\n"
+            f"\u0412\u044b \u0443\u0436\u0435 \u043e\u0442\u043f\u0440\u0430\u0432\u0438\u043b\u0438 {limit_check['current']} \u0432\u043e\u043f\u0440\u043e\u0441\u043e\u0432.\n"
+            f"\u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0447\u0435\u0440\u0435\u0437 {reset_minutes} \u043c\u0438\u043d\u0443\u0442.",
             parse_mode="HTML"
         )
-        logger.info(
-            f"[M-HANDLER-PRIVATE][handle_question][RATE_LIMIT] "
-            f"User {user_id} exceeded rate limit"
-        )
         return
-    
-    # 2. Extract content
+
+    # 2. Extract & validate
     try:
         content = prepare_content(message)
     except ValueError as e:
-        await message.answer(f"❌ {e}")
-        logger.warning(
-            f"[M-HANDLER-PRIVATE][handle_question][EXTRACT_ERROR] "
-            f"User {user_id}: {e}"
-        )
+        await message.answer(f"\u274c {e}")
         return
-    
-    # 3. Validate content
+
     is_valid, error_msg = validate_content(content)
     if not is_valid:
-        await message.answer(f"❌ {error_msg}")
-        logger.warning(
-            f"[M-HANDLER-PRIVATE][handle_question][VALIDATE_ERROR] "
-            f"User {user_id}: {error_msg}"
-        )
+        await message.answer(f"\u274c {error_msg}")
         return
-    
-    # 4. Get topic configuration
+
+    # 3. Get active group config from DB
     group_config = await get_latest_group_config(db)
-    
     if not group_config:
         await message.answer(
-            "❌ <b>Ошибка конфигурации</b>\n\n"
-            "Тема для вопросов не настроена. "
-            "Обратитесь к администратору.",
+            "\u274c <b>\u041e\u0448\u0438\u0431\u043a\u0430 \u043a\u043e\u043d\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u0438</b>\n\n"
+            "\u0422\u0435\u043c\u0430 \u0434\u043b\u044f \u0432\u043e\u043f\u0440\u043e\u0441\u043e\u0432 \u043d\u0435 \u043d\u0430\u0441\u0442\u0440\u043e\u0435\u043d\u0430. "
+            "\u041e\u0431\u0440\u0430\u0442\u0438\u0442\u0435\u0441\u044c \u043a \u0430\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0443.",
             parse_mode="HTML"
         )
-        logger.error(
-            f"[M-HANDLER-PRIVATE][handle_question][NO_TOPIC] "
-            "No group config found in database"
-        )
         return
-    
 
     group_id, topic_id = group_config
 
-    # 4.1 Check group membership
+    # 4. Membership check — only group members can submit
     if not await is_group_member(bot=bot, user_id=user_id, group_id=group_id):
         await message.answer(
-            "🔒 <b>Доступ ограничен</b>\n\n"
-            "Задавать вопросы могут только участники группы.",
+            "\U0001f512 <b>\u0414\u043e\u0441\u0442\u0443\u043f \u043e\u0433\u0440\u0430\u043d\u0438\u0447\u0435\u043d</b>\n\n"
+            "\u0417\u0430\u0434\u0430\u0432\u0430\u0442\u044c \u0432\u043e\u043f\u0440\u043e\u0441\u044b \u043c\u043e\u0433\u0443\u0442 \u0442\u043e\u043b\u044c\u043a\u043e \u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a\u0438 \u0433\u0440\u0443\u043f\u043f\u044b.",
             parse_mode="HTML"
         )
-        logger.info(
-            f"[M-HANDLER-PRIVATE][handle_question][NOT_MEMBER] "
-            f"User {user_id} is not a member of group {group_id}"
-        )
+        logger.info(f"[M-HANDLER-PRIVATE][handle_question][NOT_MEMBER] User {user_id} is not a member of group {group_id}")
         return
+
     # 5. Save pending question
     question_id = await save_pending_question(
         db=db,
@@ -291,80 +160,25 @@ async def handle_question(message: Message, bot: Bot, db) -> None:
         media_type=content.media_type,
         media_file_id=content.media_file_id
     )
-    
-    # 6. Build moderation keyboard for admin
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="✅ Одобрить",
-                callback_data=f"mod_approve:{question_id}"
-            ),
-            InlineKeyboardButton(
-                text="❌ Отклонить",
-                callback_data=f"mod_reject:{question_id}"
-            )
-        ]
-    ])
-    
-    # 7. Send to admin for moderation
-    admin_text = (
-        f"🔔 <b>Новый вопрос на модерацию</b>\n\n"
-        f"<b>Текст:</b>\n{content.text}"
-    )
-    
+    logger.info(f"[M-HANDLER-PRIVATE][handle_question][SUBMITTED] Question {question_id} from user {user_id} sent to moderation")
+
+    # 6. Send to admin for moderation
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="\u2705 \u041e\u0434\u043e\u0431\u0440\u0438\u0442\u044c", callback_data=f"mod_approve:{question_id}"),
+        InlineKeyboardButton(text="\u274c \u041e\u0442\u043a\u043b\u043e\u043d\u0438\u0442\u044c", callback_data=f"mod_reject:{question_id}")
+    ]])
+    admin_text = f"\U0001f514 <b>\u041d\u043e\u0432\u044b\u0439 \u0432\u043e\u043f\u0440\u043e\u0441 \u043d\u0430 \u043c\u043e\u0434\u0435\u0440\u0430\u0446\u0438\u044e</b>\n\n<b>\u0422\u0435\u043a\u0441\u0442:</b>\n{content.text}"
     if content.is_photo:
-        await bot.send_photo(
-            chat_id=config.ADMIN_ID,
-            photo=content.media_file_id,
-            caption=admin_text,
-            parse_mode="HTML",
-            reply_markup=keyboard
-        )
+        await bot.send_photo(chat_id=config.ADMIN_ID, photo=content.media_file_id, caption=admin_text, parse_mode="HTML", reply_markup=keyboard)
     else:
-        await bot.send_message(
-            chat_id=config.ADMIN_ID,
-            text=admin_text,
-            parse_mode="HTML",
-            reply_markup=keyboard
-        )
-    
-    # 8. Notify user
+        await bot.send_message(chat_id=config.ADMIN_ID, text=admin_text, parse_mode="HTML", reply_markup=keyboard)
+
+    # 7. Notify user
     await message.answer(
-        "📨 <b>Вопрос отправлен на модерацию</b>\n\n"
-        "После проверки он будет опубликован анонимно.",
+        "\U0001f4e8 <b>\u0412\u043e\u043f\u0440\u043e\u0441 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d \u043d\u0430 \u043c\u043e\u0434\u0435\u0440\u0430\u0446\u0438\u044e</b>\n\n"
+        "\u041f\u043e\u0441\u043b\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u043e\u043d \u0431\u0443\u0434\u0435\u0442 \u043e\u043f\u0443\u0431\u043b\u0438\u043a\u043e\u0432\u0430\u043d \u0430\u043d\u043e\u043d\u0438\u043c\u043d\u043e.",
         parse_mode="HTML"
     )
-    
-    # 9. Record submission in rate limiter
+
+    # 8. Record submission in rate limiter (at the very end, after admin notify + user notify)
     rate_limiter.record_submission(user_id)
-    
-    logger.info(
-        f"[M-HANDLER-PRIVATE][handle_question][SUBMITTED] "
-        f"Question {question_id} from user {user_id} sent to moderation"
-    )
-
-# ==============================================================================
-# END_BLOCK: handle_question
-# ==============================================================================
-
-
-# ==============================================================================
-# CHANGE_SUMMARY
-# ==============================================================================
-"""
-CHANGE_SUMMARY:
-    - Implemented cmd_start with welcome message and instructions
-    - Implemented cmd_delete delegating to show_delete_keyboard
-    - Implemented handle_question with full flow:
-      * Rate limit check
-      * Content extraction and validation
-      * Topic configuration check
-      * Pending question save
-      * Admin notification with moderation buttons
-      * User notification
-      * Rate limiter recording
-    - All handlers filtered to private chats only
-    - Proper error handling and user feedback
-    - Logging for all operations
-"""
-
