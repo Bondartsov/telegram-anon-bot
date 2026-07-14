@@ -24,7 +24,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.config import config, setup_logging
 from src.database import init_db
 from src.handlers.callback import router as callback_router
-from src.handlers.callback import show_delete_keyboard
 from src.handlers.group import router as group_router
 from src.handlers.private import router as private_router
 from src.services.rate_limiter import get_rate_limiter
@@ -230,13 +229,7 @@ async def main() -> None:
         
         # Setup middleware
         setup_middleware(dp)
-        
-        # Override /delete handler with db access
-        # This is a workaround since we can't easily pass db to command handlers
-        @private_router.message(lambda m: m.text == "/delete" and m.chat.type == "private")
-        async def cmd_delete_with_db(message, bot: Bot):
-            await show_delete_keyboard(bot, db, message.from_user.id, message.chat.id)
-        
+
         # Log bot info
         me = await bot.get_me()
         logger.info(f"[M-MAIN][main][START] Bot started: @{me.username}")
