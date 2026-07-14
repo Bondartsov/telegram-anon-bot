@@ -289,13 +289,14 @@ async def get_user_questions(
             - topic_message_id: Message ID in topic
     """
     cutoff = datetime.now() - timedelta(hours=hours)
-    
+
     async with db.execute(
         """
         SELECT id, content, created_at, topic_message_id, topic_id, group_id
         FROM questions
-        WHERE user_id = ? 
+        WHERE user_id = ?
           AND is_deleted = FALSE
+          AND status = 'approved'
           AND created_at >= ?
         ORDER BY created_at DESC
         LIMIT ?
