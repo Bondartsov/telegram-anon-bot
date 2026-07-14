@@ -75,9 +75,9 @@ class BotConfig(BaseSettings):
     # Required settings
     BOT_TOKEN: str = Field(..., description="Telegram bot token from @BotFather")
     GROUP_ID: int = Field(..., description="Target group ID")
-    
+    ADMIN_ID: int = Field(..., description="Admin user ID for moderation")
+
     # Optional settings with defaults
-    ADMIN_ID: int = Field(default=377309339, description="Admin user ID for moderation")
     RATE_LIMIT: int = Field(default=10, ge=1, le=100, description="Questions per hour per user")
     LOG_LEVEL: str = Field(default="INFO", description="Logging level")
     DB_PATH: str = Field(default="data/bot.db", description="Path to SQLite database")
@@ -91,15 +91,6 @@ class BotConfig(BaseSettings):
         if ":" not in v:
             raise ValueError("INVALID_TOKEN: BOT_TOKEN format is invalid")
         return v.strip()
-    
-    @field_validator("GROUP_ID")
-    @classmethod
-    def validate_group_id(cls, v: int) -> int:
-        """Validate group ID (should be negative for supergroups)."""
-        if v >= 0:
-            # Allow positive for testing, but warn
-            pass
-        return v
     
     @field_validator("LOG_LEVEL")
     @classmethod
